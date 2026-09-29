@@ -16,8 +16,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python3 -m pip install -q curl_cffi requests
-      - run: python3 devscripts/gvsearch_probe.py
+      - run: python3 -m pip install -q playwright && python3 -m playwright install --with-deps chromium
+      - run: xvfb-run -a python3 devscripts/gvsearch_probe.py
       - name: yt-dlp gvsearch (this branch)
         run: |
           python3 -m yt_dlp --flat-playlist --print "%(url)s" -v "gvsearch5:big buck bunny" 2>&1 | tail -40 || true
