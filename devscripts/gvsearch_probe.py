@@ -11,18 +11,25 @@ Q = 'big buck bunny'
 OUT = 'probe_out'
 os.makedirs(OUT, exist_ok=True)
 
-UAS = {
-    'ytdlp_chrome': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
-    'lynx': 'Lynx/2.9.2 libwww-FM/2.14 SSL-MM/1.4.1 OpenSSL/3.0.13',
-    'w3m': 'w3m/0.5.3+git20230121',
-    'links': 'Links (2.29; Linux 6.1.0 x86_64; GNU C 12.2; text)',
-    'opera_mini': 'Opera/9.80 (J2ME/MIDP; Opera Mini/9.80 (S60; SymbOS; Opera Mobi/23.348; U; en) Presto/2.5.25 Version/10.54',
-    'nokia': 'Nokia6230i/2.0 (03.80) Profile/MIDP-2.0 Configuration/CLDC-1.1',
-}
-VARIANTS = {
-    'vid': {'tbm': 'vid', 'q': Q, 'hl': 'en', 'num': '10'},
-    'vid_gbv1': {'tbm': 'vid', 'q': Q, 'hl': 'en', 'num': '10', 'gbv': '1'},
-    'udm7': {'udm': '7', 'q': Q, 'hl': 'en'},
+import random
+import string
+
+def arc():
+    return ''.join(random.choices(string.ascii_letters + string.digits + '_-', k=23))
+
+GSA = [
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) GSA/383.0.797833943 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) GSA/360.0.642133296 Mobile/15E148 Safari/604.1',
+]
+LYNX = 'Lynx/2.9.2 libwww-FM/2.14 SSL-MM/1.4.1 OpenSSL/3.0.13'
+A = arc()
+CASES = {
+    'lynx_vid': (LYNX, {'tbm': 'vid', 'q': Q, 'hl': 'en'}),
+    'gsa0_vid_arc': (GSA[0], {'tbm': 'vid', 'q': Q, 'hl': 'en', 'asearch': 'arc', 'async': f'arc_id:srp_{A}_100,use_ac:true,_fmt:prog'}),
+    'gsa0_web_arc': (GSA[0], {'q': Q + ' video', 'hl': 'en', 'filter': '0', 'asearch': 'arc', 'async': f'arc_id:srp_{A}_100,use_ac:true,_fmt:prog'}),
+    'gsa1_vid_arc': (GSA[1], {'tbm': 'vid', 'q': Q, 'hl': 'en', 'asearch': 'arc', 'async': f'arc_id:srp_{A}_100,use_ac:true,_fmt:prog'}),
+    'gsa0_vid_plain': (GSA[0], {'tbm': 'vid', 'q': Q, 'hl': 'en'}),
+    'gsa0_udm7_arc': (GSA[0], {'udm': '7', 'q': Q, 'hl': 'en', 'asearch': 'arc', 'async': f'arc_id:srp_{A}_100,use_ac:true,_fmt:prog'}),
 }
 
 
@@ -32,7 +39,7 @@ def summarize(name, r):
     with open(path, 'w', encoding='utf-8') as f:
         f.write(t)
     marks = {m: (m in t) for m in ('enablejs', '/sorry/', 'unusual traffic', 'dXiKIc', 'pnnext',
-                                     '/url?q=', 'consent.google', 'Please click', 'noscript')}
+                                     '/url?q=', 'consent.google', 'Please click', 'noscript', 'MjjYud', '<h3')}
     hrefs = re.findall(r'href="([^"]+)"', t)
     ext = []
     for h in hrefs:
@@ -42,25 +49,24 @@ def summarize(name, r):
             h = (q.get('q') or q.get('url') or [''])[0]
         if h.startswith('http') and not re.match(r'https?://([^/]+\.)?(google|gstatic|googleusercontent|schema)\.', h):
             ext.append(h)
-    classes = re.findall(r'<a[^>]* class="([^"]+)"', t)
-    print(f'== {name}: status={r.status_code} url={r.url[:120]} len={len(t)}')
+    print(f'== {name}: status={r.status_code} url={r.url[:160]} len={len(t)}')
     print('   marks:', {k: v for k, v in marks.items() if v})
     print('   ext links:', len(ext))
-    for e in dict.fromkeys(ext):
+    for e in list(dict.fromkeys(ext))[:15]:
         print('     ', e[:150])
-    print('   a-classes:', sorted(set(classes))[:15])
-    for m in re.finditer(r'href="(/url\?[^"]+|https?://(?:www\.)?youtube\.com/watch[^"]+)"', t):
-        s = max(0, m.start() - 300)
-        print('   CONTEXT:', re.sub(r'\s+', ' ', t[s:m.end() + 100])[:500])
-        break
+    if len(t) < 5000:
+        print('   BODY:', re.sub(r'\s+', ' ', t)[:2500])
+    m = re.search(r'href="(/url\?[^"]+|https?://(?:www\.)?youtube\.com/watch[^"]+)"', t)
+    if m:
+        s0 = max(0, m.start() - 600)
+        print('   CONTEXT:', re.sub(r'\s+', ' ', t[s0:m.end() + 400])[:1200])
 
 
-for vn, params in VARIANTS.items():
-    for un, ua in UAS.items():
-        try:
-            r = requests.get('https://www.google.com/search', params=params, timeout=20,
-                             headers={'User-Agent': ua, 'Accept-Language': 'en-US,en;q=0.9'},
-                             cookies={'CONSENT': 'YES+'})
-            summarize(f'{vn}__{un}', r)
-        except Exception as e:
-            print(f'== {vn}__{un}: EXC {e}')
+for name, (ua, params) in CASES.items():
+    try:
+        r = requests.get('https://www.google.com/search', params=params, timeout=20,
+                         headers={'User-Agent': ua, 'Accept-Language': 'en-US,en;q=0.9', 'Accept': '*/*'},
+                         cookies={'CONSENT': 'YES+'})
+        summarize(name, r)
+    except Exception as e:
+        print(f'== {name}: EXC {e}')
